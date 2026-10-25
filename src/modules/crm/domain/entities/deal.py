@@ -68,3 +68,32 @@ class Deal:
         if currency:
             self.currency = currency.upper()
 
+    def update_details(
+        self,
+        title: Optional[str] = None,
+        amount: Optional[Decimal] = None,
+        currency: Optional[str] = None,
+        expected_close_date: Optional[date] = None,
+        account_id: Optional[UUID] = None,
+        contact_id: Optional[UUID] = None,
+        custom_fields: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Actualiza la información general de la oportunidad."""
+        if title is not None:
+            clean_title = title.strip()
+            if len(clean_title) < 3:
+                raise BusinessRuleViolationException("El título debe tener al menos 3 caracteres.")
+            self.title = clean_title
+        if amount is not None:
+            self.update_amount(amount, currency)
+        elif currency is not None:
+            self.currency = currency.upper()
+        if expected_close_date is not None:
+            self.expected_close_date = expected_close_date
+        if account_id is not None:
+            self.account_id = account_id
+        if contact_id is not None:
+            self.contact_id = contact_id
+        if custom_fields is not None:
+            self.custom_fields = custom_fields
+

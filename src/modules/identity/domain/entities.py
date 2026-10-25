@@ -24,11 +24,11 @@ class User:
     email: str
     full_name: str
     hashed_password: str
-    role: str = "SALES_REP"  # ADMIN, SALES_MANAGER, SALES_REP
+    role: str = "CLIENTE"  # ADMIN (Jefe), DEV (Desarrollo), CLIENTE (Usuario)
     is_active: bool = True
 
     def change_role(self, new_role: str) -> None:
-        valid_roles = {"ADMIN", "SALES_MANAGER", "SALES_REP"}
+        valid_roles = {"ADMIN", "DEV", "CLIENTE", "SALES_MANAGER", "SALES_REP"}
         if new_role not in valid_roles:
             raise BusinessRuleViolationException(f"Rol '{new_role}' no es válido.")
         self.role = new_role

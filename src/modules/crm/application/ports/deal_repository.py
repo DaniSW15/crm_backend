@@ -47,3 +47,8 @@ class DealRepository(ABC):
         """Registra una transición de etapa inmutable para auditoría y analítica."""
         pass
 
+    @abstractmethod
+    async def delete(self, deal_id: UUID, tenant_id: UUID) -> bool:
+        """Elimina (borrado lógico) una oportunidad comercial."""
+        pass
+

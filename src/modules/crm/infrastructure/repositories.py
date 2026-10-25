@@ -4,11 +4,19 @@ from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.crm.application.ports.deal_repository import DealRepository
+from src.modules.crm.application.ports.pipeline_repository import PipelineRepository
 from src.modules.crm.domain.entities.deal import Deal
-from src.modules.crm.infrastructure.models import DealModel, DealStageHistoryModel
+from src.modules.crm.domain.entities.pipeline import Pipeline, PipelineStage
+from src.modules.crm.infrastructure.models import (
+    DealModel,
+    DealStageHistoryModel,
+    PipelineModel,
+    PipelineStageModel,
+)
 
 
 class SqlAlchemyDealRepository(DealRepository):
@@ -147,4 +155,81 @@ class SqlAlchemyDealRepository(DealRepository):
         )
         self.session.add(history)
         await self.session.commit()
+
+    async def delete(self, deal_id: UUID, tenant_id: UUID) -> bool:
+        stmt = select(DealModel).where(
+            DealModel.id == deal_id,
+            DealModel.tenant_id == tenant_id,
+            DealModel.is_deleted.is_(False),
+        )
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if not model:
+            return False
+
+        model.is_deleted = True
+        model.deleted_at = datetime.utcnow()
+        await self.session.commit()
+        return True
+
+
+class SqlAlchemyPipelineRepository(PipelineRepository):
+    """
+    Implementación del repositorio de Pipelines usando SQLAlchemy 2.0 Async.
+    """
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    def _to_entity(self, model: PipelineModel) -> Pipeline:
+        stages = [
+            PipelineStage(
+                id=s.id,
+                pipeline_id=s.pipeline_id,
+                name=s.name,
+                order=s.order,
+                win_probability=float(s.win_probability),
+                days_until_stale=s.days_until_stale,
+                is_won_stage=s.is_won_stage,
+                is_lost_stage=s.is_lost_stage,
+            )
+            for s in sorted(model.stages, key=lambda x: x.order)
+        ]
+        return Pipeline(
+            id=model.id,
+            tenant_id=model.tenant_id,
+            name=model.name,
+            is_default=model.is_default,
+            is_active=model.is_active,
+            stages=stages,
+        )
+
+    async def list_by_tenant(self, tenant_id: UUID) -> List[Pipeline]:
+        stmt = (
+            select(PipelineModel)
+            .options(selectinload(PipelineModel.stages))
+            .where(
+                PipelineModel.tenant_id == tenant_id,
+                PipelineModel.is_deleted.is_(False),
+                PipelineModel.is_active.is_(True),
+            )
+            .order_by(PipelineModel.created_at.asc())
+        )
+        res = await self.session.execute(stmt)
+        models = res.scalars().all()
+        return [self._to_entity(m) for m in models]
+
+    async def get_by_id(self, pipeline_id: UUID, tenant_id: UUID) -> Optional[Pipeline]:
+        stmt = (
+            select(PipelineModel)
+            .options(selectinload(PipelineModel.stages))
+            .where(
+                PipelineModel.id == pipeline_id,
+                PipelineModel.tenant_id == tenant_id,
+                PipelineModel.is_deleted.is_(False),
+            )
+        )
+        res = await self.session.execute(stmt)
+        model = res.scalar_one_or_none()
+        return self._to_entity(model) if model else None
 

@@ -13,6 +13,8 @@ from src.modules.identity.infrastructure.models import TenantModel, UserModel
 
 DEFAULT_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
+DEFAULT_DEV_USER_ID = uuid.UUID("d0000000-0000-0000-0000-000000000001")
+DEFAULT_CLIENT_USER_ID = uuid.UUID("e0000000-0000-0000-0000-000000000001")
 DEFAULT_SALES_REP_ID = uuid.UUID("c0000000-0000-0000-0000-000000000001")
 DEFAULT_PIPELINE_ID = uuid.UUID("a0000000-0000-0000-0000-000000000001")
 DEFAULT_STAGE_1_ID = uuid.UUID("b0000000-0000-0000-0000-000000000001")
@@ -59,6 +61,30 @@ async def seed_initial_data(session: AsyncSession) -> None:
             role="SALES_REP",
         )
         session.add(sales_rep)
+
+    dev_res = await session.execute(select(UserModel).where(UserModel.id == DEFAULT_DEV_USER_ID))
+    if not dev_res.scalar_one_or_none():
+        dev_user = UserModel(
+            id=DEFAULT_DEV_USER_ID,
+            tenant_id=DEFAULT_TENANT_ID,
+            email="dev@democrm.com",
+            hashed_password=hash_password("admin123"),
+            full_name="Desarrollador Demo",
+            role="DEV",
+        )
+        session.add(dev_user)
+
+    client_res = await session.execute(select(UserModel).where(UserModel.id == DEFAULT_CLIENT_USER_ID))
+    if not client_res.scalar_one_or_none():
+        client_user = UserModel(
+            id=DEFAULT_CLIENT_USER_ID,
+            tenant_id=DEFAULT_TENANT_ID,
+            email="cliente@democrm.com",
+            hashed_password=hash_password("admin123"),
+            full_name="Cliente Usuario Demo",
+            role="CLIENTE",
+        )
+        session.add(client_user)
     await session.flush()
 
     # 3. Cuenta de prueba (Cubre el default de Swagger 3fa85f64...)

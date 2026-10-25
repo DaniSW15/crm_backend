@@ -55,10 +55,12 @@ setup_dishka(container, app)
 
 
 from src.modules.crm.presentation.routes.deals import router as deals_router
+from src.modules.crm.presentation.routes.pipelines import router as pipelines_router
 from src.modules.identity.presentation.routes import router as auth_router
 
 # Registrar routers de módulos
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(pipelines_router, prefix="/api/v1")
 app.include_router(deals_router, prefix="/api/v1")
 
 

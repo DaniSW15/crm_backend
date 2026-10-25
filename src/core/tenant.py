@@ -91,3 +91,22 @@ def require_authenticated_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return tenant_context
+
+
+def require_roles(*allowed_roles: str):
+    """
+    Control de acceso basado en roles (RBAC).
+    Verifica que el usuario autenticado posea uno de los roles autorizados.
+    Ejemplo: require_roles("ADMIN", "DEV")
+    """
+    def role_checker(context: TenantContext = Depends(require_authenticated_user)) -> TenantContext:
+        user_role = (context.role or "").upper()
+        allowed = {r.upper() for r in allowed_roles}
+        if user_role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Acceso denegado: tu rol '{user_role or 'SIN_ROL'}' no tiene permiso para esta operación. Roles requeridos: {', '.join(allowed)}.",
+            )
+        return context
+
+    return role_checker

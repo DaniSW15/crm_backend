@@ -45,7 +45,7 @@ class UserModel(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, SoftDele
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    role: Mapped[str] = mapped_column(String(50), default="SALES_REP", nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="CLIENTE", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relaciones
