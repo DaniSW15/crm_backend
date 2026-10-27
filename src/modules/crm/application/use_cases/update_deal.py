@@ -31,20 +31,21 @@ class UpdateDealUseCase:
         self.uow = uow
 
     async def execute(self, cmd: UpdateDealCommand) -> Deal:
-        deal = await self.deal_repo.get_by_id(cmd.deal_id, cmd.tenant_id)
-        if not deal:
-            raise EntityNotFoundException(f"La oportunidad con ID '{cmd.deal_id}' no existe.")
+        async with self.uow:
+            deal = await self.deal_repo.get_by_id(cmd.deal_id, cmd.tenant_id)
+            if not deal:
+                raise EntityNotFoundException(f"La oportunidad con ID '{cmd.deal_id}' no existe.")
 
-        # Invocar la lógica de negocio en la entidad de dominio
-        deal.update_details(
-            title=cmd.title,
-            amount=cmd.amount,
-            currency=cmd.currency,
-            expected_close_date=cmd.expected_close_date,
-            account_id=cmd.account_id,
-            contact_id=cmd.contact_id,
-            custom_fields=cmd.custom_fields,
-        )
+            # Invocar la lógica de negocio en la entidad de dominio
+            deal.update_details(
+                title=cmd.title,
+                amount=cmd.amount,
+                currency=cmd.currency,
+                expected_close_date=cmd.expected_close_date,
+                account_id=cmd.account_id,
+                contact_id=cmd.contact_id,
+                custom_fields=cmd.custom_fields,
+            )
 
-        return await self.deal_repo.save(deal)
+            return await self.deal_repo.save(deal)
 

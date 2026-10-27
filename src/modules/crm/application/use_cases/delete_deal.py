@@ -13,7 +13,8 @@ class DeleteDealUseCase:
         self.uow = uow
 
     async def execute(self, deal_id: UUID, tenant_id: UUID) -> None:
-        deleted = await self.deal_repo.delete(deal_id=deal_id, tenant_id=tenant_id)
-        if not deleted:
-            raise EntityNotFoundException(f"La oportunidad con ID '{deal_id}' no existe.")
+        async with self.uow:
+            deleted = await self.deal_repo.delete(deal_id=deal_id, tenant_id=tenant_id)
+            if not deleted:
+                raise EntityNotFoundException(f"La oportunidad con ID '{deal_id}' no existe.")
 

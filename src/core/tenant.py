@@ -52,7 +52,7 @@ def resolve_tenant_context(
             user_uuid = UUID(payload["sub"])
             role = payload.get("role")
             return TenantContext(tenant_id=tenant_uuid, user_id=user_uuid, role=role)
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token de autenticación inválido.",
