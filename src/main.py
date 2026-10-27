@@ -10,7 +10,7 @@ settings = get_settings()
 
 
 from src.core.database import async_session_factory, engine
-from src.core.seed import seed_initial_data
+from scripts.seed_demo import seed_initial_data
 from src.shared.infrastructure.base_model import Base
 
 

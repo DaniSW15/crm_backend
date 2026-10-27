@@ -6,7 +6,10 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from src.modules.crm.application.ports.deal_repository import DealRepository
+from src.modules.crm.application.ports.pipeline_repository import PipelineRepository
 from src.modules.crm.domain.entities.deal import Deal
+from src.shared.application.unit_of_work import UnitOfWork
+from src.shared.domain.exceptions import EntityNotFoundException
 
 
 @dataclass
@@ -27,10 +30,22 @@ class CreateDealCommand:
 class CreateDealUseCase:
     """Caso de uso: Crear una nueva oportunidad comercial."""
 
-    def __init__(self, deal_repository: DealRepository):
+    def __init__(
+        self,
+        deal_repository: DealRepository,
+        pipeline_repository: PipelineRepository,
+        uow: UnitOfWork,
+    ):
         self.deal_repo = deal_repository
+        self.pipeline_repo = pipeline_repository
+        self.uow = uow
 
     async def execute(self, cmd: CreateDealCommand) -> Deal:
+        pipeline = await self.pipeline_repo.get_by_id(cmd.pipeline_id, cmd.tenant_id)
+        if not pipeline:
+            raise EntityNotFoundException("El embudo de ventas no existe en esta organización.")
+        pipeline.get_stage(cmd.stage_id)
+
         deal = Deal(
             id=uuid.uuid4(),
             tenant_id=cmd.tenant_id,

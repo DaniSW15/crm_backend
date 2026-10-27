@@ -23,9 +23,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         parts = hashed_password.split("$")
         if len(parts) != 3 or parts[0] != "pbkdf2_sha256":
-            # Soporte para hashes mock de seed
-            if hashed_password == "mock-password-hash":
-                return plain_password in ("admin123", "password", "secret")
             return False
 
         _, salt, expected_key = parts

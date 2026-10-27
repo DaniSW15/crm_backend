@@ -77,7 +77,7 @@ class SqlAlchemyIdentityRepository(IdentityRepository):
             )
             self.session.add(model)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(model)
         return self._to_tenant_entity(model)
 
@@ -125,7 +125,7 @@ class SqlAlchemyIdentityRepository(IdentityRepository):
             )
             self.session.add(model)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(model)
         return self._to_user_entity(model)
 

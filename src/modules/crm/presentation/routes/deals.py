@@ -65,6 +65,8 @@ async def create_deal(
     try:
         deal = await use_case.execute(cmd)
         return DealResponse.model_validate(deal)
+    except EntityNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
     except BusinessRuleViolationException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
     except IntegrityError as e:

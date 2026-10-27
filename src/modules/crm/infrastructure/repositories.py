@@ -131,7 +131,7 @@ class SqlAlchemyDealRepository(DealRepository):
             )
             self.session.add(model)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(model)
         return self._to_entity(model)
 
@@ -154,7 +154,7 @@ class SqlAlchemyDealRepository(DealRepository):
             transitioned_at=datetime.utcnow(),
         )
         self.session.add(history)
-        await self.session.commit()
+        await self.session.flush()
 
     async def delete(self, deal_id: UUID, tenant_id: UUID) -> bool:
         stmt = select(DealModel).where(
@@ -169,7 +169,7 @@ class SqlAlchemyDealRepository(DealRepository):
 
         model.is_deleted = True
         model.deleted_at = datetime.utcnow()
-        await self.session.commit()
+        await self.session.flush()
         return True
 
 
@@ -194,6 +194,7 @@ class SqlAlchemyPipelineRepository(PipelineRepository):
                 is_lost_stage=s.is_lost_stage,
             )
             for s in sorted(model.stages, key=lambda x: x.order)
+            if s.tenant_id == model.tenant_id
         ]
         return Pipeline(
             id=model.id,

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from src.modules.crm.application.ports.deal_repository import DealRepository
 from src.modules.crm.domain.entities.deal import Deal
+from src.shared.application.unit_of_work import UnitOfWork
 from src.shared.domain.exceptions import EntityNotFoundException
 
 
@@ -25,8 +26,9 @@ class UpdateDealCommand:
 class UpdateDealUseCase:
     """Caso de uso: Editar los detalles de una oportunidad comercial existente."""
 
-    def __init__(self, deal_repository: DealRepository):
+    def __init__(self, deal_repository: DealRepository, uow: UnitOfWork):
         self.deal_repo = deal_repository
+        self.uow = uow
 
     async def execute(self, cmd: UpdateDealCommand) -> Deal:
         deal = await self.deal_repo.get_by_id(cmd.deal_id, cmd.tenant_id)

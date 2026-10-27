@@ -31,18 +31,18 @@ def resolve_tenant_context(
     x_tenant_id: Optional[str] = Header(
         default=None,
         alias="X-Tenant-ID",
-        description="UUID de la organización / tenant (opcional si envías Bearer Token)",
+        description="UUID de la organización / tenant (solo en DEBUG)",
     ),
     x_user_id: Optional[str] = Header(
         default=None,
         alias="X-User-ID",
-        description="UUID del usuario (opcional si envías Bearer Token)",
+        description="UUID del usuario (solo en DEBUG)",
     ),
 ) -> TenantContext:
     """
     Resuelve el tenant y usuario actual:
     1. Si viene Bearer JWT token, lo valida y extrae claims de seguridad (tenant_id, sub, role).
-    2. Si no viene token, intenta resolver por los headers X-Tenant-ID / X-User-ID o valor default en DEBUG.
+    2. Solo en DEBUG, permite headers X-Tenant-ID / X-User-ID o valores demo.
     """
     # 1. Intentar validar por Bearer JWT Token
     if bearer and bearer.credentials:
@@ -55,23 +55,22 @@ def resolve_tenant_context(
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Token de autenticación inválido: {str(e)}",
+                detail="Token de autenticación inválido.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    # 2. Modo fallback (Headers o Modo DEBUG para desarrollo ágil)
-    effective_tenant_id = x_tenant_id or (DEFAULT_DEV_TENANT if settings.DEBUG else None)
-    if not effective_tenant_id:
+    # 2. Los headers de desarrollo nunca autentican peticiones en producción.
+    if not settings.DEBUG:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticación requerida. Envía el Bearer Token o el header 'X-Tenant-ID'.",
+            detail="Autenticación requerida. Envía un Bearer Token válido.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    effective_tenant_id = x_tenant_id or DEFAULT_DEV_TENANT
     try:
         tenant_uuid = UUID(effective_tenant_id)
-        effective_user_id = x_user_id or (DEFAULT_DEV_USER if settings.DEBUG else None)
-        user_uuid = UUID(effective_user_id) if effective_user_id else None
+        user_uuid = UUID(x_user_id or DEFAULT_DEV_USER)
         return TenantContext(tenant_id=tenant_uuid, user_id=user_uuid, role="ADMIN")
     except ValueError:
         raise HTTPException(

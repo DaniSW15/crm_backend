@@ -158,3 +158,22 @@ async def seed_initial_data(session: AsyncSession) -> None:
         session.add_all(stages)
 
     await session.commit()
+
+
+async def main() -> None:
+    from src.core.database import async_session_factory, engine
+    from src.shared.infrastructure.base_model import Base
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with async_session_factory() as session:
+            await seed_initial_data(session)
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

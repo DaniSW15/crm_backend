@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.core.config import Settings, get_settings
 from src.core.database import async_session_factory, engine
+from src.shared.application.unit_of_work import UnitOfWork
+from src.shared.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 
 
 class CoreProvider(Provider):
@@ -28,6 +30,10 @@ class CoreProvider(Provider):
     ) -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
             yield session
+
+    @provide(scope=Scope.REQUEST)
+    def get_unit_of_work(self, session: AsyncSession) -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(session)
 
 
 from src.modules.crm.infrastructure.di import CrmProvider

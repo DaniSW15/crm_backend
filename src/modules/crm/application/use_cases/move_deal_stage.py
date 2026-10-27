@@ -3,7 +3,9 @@ from typing import Optional
 from uuid import UUID
 
 from src.modules.crm.application.ports.deal_repository import DealRepository
+from src.modules.crm.application.ports.pipeline_repository import PipelineRepository
 from src.modules.crm.domain.entities.deal import Deal
+from src.shared.application.unit_of_work import UnitOfWork
 from src.shared.domain.exceptions import EntityNotFoundException
 
 
@@ -18,13 +20,25 @@ class MoveDealStageCommand:
 class MoveDealStageUseCase:
     """Caso de uso: Mover una oportunidad a una nueva etapa del embudo comercial."""
 
-    def __init__(self, deal_repository: DealRepository):
+    def __init__(
+        self,
+        deal_repository: DealRepository,
+        pipeline_repository: PipelineRepository,
+        uow: UnitOfWork,
+    ):
         self.deal_repo = deal_repository
+        self.pipeline_repo = pipeline_repository
+        self.uow = uow
 
     async def execute(self, cmd: MoveDealStageCommand) -> Deal:
         deal = await self.deal_repo.get_by_id(cmd.deal_id, cmd.tenant_id)
         if not deal:
             raise EntityNotFoundException(f"La oportunidad con ID {cmd.deal_id} no existe.")
+
+        pipeline = await self.pipeline_repo.get_by_id(deal.pipeline_id, cmd.tenant_id)
+        if not pipeline:
+            raise EntityNotFoundException("El embudo de ventas no existe en esta organización.")
+        pipeline.get_stage(cmd.new_stage_id)
 
         previous_stage_id = deal.stage_id
 

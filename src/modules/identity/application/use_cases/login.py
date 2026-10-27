@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from src.core.security import create_access_token, verify_password
+from src.modules.identity.application.dto import AuthResult
 from src.modules.identity.application.ports.identity_repository import (
     IdentityRepository,
 )
-from src.modules.identity.application.use_cases.register_tenant import AuthResult
+from src.modules.identity.application.ports.security import PasswordHasher, TokenService
 from src.shared.domain.exceptions import BusinessRuleViolationException
 
 
@@ -17,8 +17,15 @@ class LoginCommand:
 class LoginUseCase:
     """Caso de uso: Autenticar a un usuario y generar su token JWT de sesión."""
 
-    def __init__(self, identity_repo: IdentityRepository):
+    def __init__(
+        self,
+        identity_repo: IdentityRepository,
+        password_hasher: PasswordHasher,
+        token_service: TokenService,
+    ):
         self.identity_repo = identity_repo
+        self.password_hasher = password_hasher
+        self.token_service = token_service
 
     async def execute(self, cmd: LoginCommand) -> AuthResult:
         clean_email = cmd.email.lower().strip()
@@ -27,12 +34,12 @@ class LoginUseCase:
         if not user or not user.is_active:
             raise BusinessRuleViolationException("Credenciales inválidas o usuario inactivo.")
 
-        if not verify_password(cmd.password, user.hashed_password):
+        if not self.password_hasher.verify(cmd.password, user.hashed_password):
             raise BusinessRuleViolationException("Credenciales inválidas.")
 
         # Generar token JWT con los claims necesarios
-        token = create_access_token(
-            data={
+        token = self.token_service.create_access_token(
+            {
                 "sub": str(user.id),
                 "tenant_id": str(user.tenant_id),
                 "email": user.email,

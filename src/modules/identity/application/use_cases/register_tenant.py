@@ -1,13 +1,13 @@
 import re
 import uuid
 from dataclasses import dataclass
-from uuid import UUID
-
-from src.core.security import create_access_token, hash_password
+from src.modules.identity.application.dto import AuthResult
 from src.modules.identity.application.ports.identity_repository import (
     IdentityRepository,
 )
 from src.modules.identity.domain.entities import Tenant, User
+from src.modules.identity.application.ports.security import PasswordHasher, TokenService
+from src.shared.application.unit_of_work import UnitOfWork
 from src.shared.domain.exceptions import BusinessRuleViolationException
 
 
@@ -20,22 +20,20 @@ class RegisterTenantCommand:
     admin_password: str
 
 
-@dataclass
-class AuthResult:
-    access_token: str
-    token_type: str
-    user_id: UUID
-    tenant_id: UUID
-    email: str
-    full_name: str
-    role: str
-
-
 class RegisterTenantUseCase:
     """Caso de uso: Registrar una nueva organización junto a su usuario administrador inicial."""
 
-    def __init__(self, identity_repo: IdentityRepository):
+    def __init__(
+        self,
+        identity_repo: IdentityRepository,
+        password_hasher: PasswordHasher,
+        token_service: TokenService,
+        uow: UnitOfWork,
+    ):
         self.identity_repo = identity_repo
+        self.password_hasher = password_hasher
+        self.token_service = token_service
+        self.uow = uow
 
     async def execute(self, cmd: RegisterTenantCommand) -> AuthResult:
         # Normalizar slug (solo letras, números y guiones)
@@ -71,14 +69,14 @@ class RegisterTenantUseCase:
             tenant_id=saved_tenant.id,
             email=clean_email,
             full_name=cmd.admin_full_name.strip(),
-            hashed_password=hash_password(cmd.admin_password),
+            hashed_password=self.password_hasher.hash(cmd.admin_password),
             role="ADMIN",
         )
         saved_user = await self.identity_repo.save_user(user)
 
         # Generar Token JWT con claims de multi-tenancy
-        token = create_access_token(
-            data={
+        token = self.token_service.create_access_token(
+            {
                 "sub": str(saved_user.id),
                 "tenant_id": str(saved_tenant.id),
                 "email": saved_user.email,
