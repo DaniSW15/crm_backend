@@ -9,7 +9,7 @@ from src.modules.crm.application.ports.deal_repository import DealRepository
 from src.modules.crm.application.ports.pipeline_repository import PipelineRepository
 from src.modules.crm.domain.entities.deal import Deal
 from src.shared.application.unit_of_work import UnitOfWork
-from src.shared.domain.exceptions import EntityNotFoundException
+from src.shared.domain.exceptions import BusinessRuleViolationException, EntityNotFoundException
 
 
 @dataclass
@@ -46,6 +46,16 @@ class CreateDealUseCase:
             if not pipeline:
                 raise EntityNotFoundException("El embudo de ventas no existe en esta organización.")
             pipeline.get_stage(cmd.stage_id)
+
+            if not await self.deal_repo.references_exist(
+                tenant_id=cmd.tenant_id,
+                owner_id=cmd.owner_id,
+                account_id=cmd.account_id,
+                contact_id=cmd.contact_id,
+            ):
+                raise BusinessRuleViolationException(
+                    "El propietario, la cuenta o el contacto no están disponibles en esta organización."
+                )
 
             deal = Deal(
                 id=uuid.uuid4(),

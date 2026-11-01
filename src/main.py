@@ -57,11 +57,17 @@ setup_dishka(container, app)
 from src.modules.crm.presentation.routes.deals import router as deals_router
 from src.modules.crm.presentation.routes.pipelines import router as pipelines_router
 from src.modules.identity.presentation.routes import router as auth_router
+from src.modules.crm.presentation.routes.customers import router as customers_router
+from src.modules.crm.presentation.routes.analytics import router as analytics_router
+from src.modules.crm.presentation.routes.opportunities import router as opportunities_router
 
 # Registrar routers de módulos
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(pipelines_router, prefix="/api/v1")
 app.include_router(deals_router, prefix="/api/v1")
+app.include_router(customers_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(opportunities_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

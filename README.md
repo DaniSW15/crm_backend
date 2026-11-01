@@ -3,6 +3,11 @@
 Backend de FastAPI organizado como monolito modular. `identity` gestiona organizaciones
 y usuarios; `crm` gestiona oportunidades y embudos de ventas.
 
+La API también expone clientes (`/api/v1/customers/`), oportunidades mediante la
+ruta compatible `/api/v1/opportunities/`, indicadores (`/api/v1/analytics/summary/`)
+y cierre de sesión con revocación persistente (`/api/v1/auth/logout/`). Los contratos,
+ejemplos y pasos de migración están en [la guía de endpoints](docs/api-endpoints.md).
+
 ## Organización
 
 Cada módulo mantiene estas responsabilidades:
@@ -31,6 +36,18 @@ seguir este patrón; los repositorios no deben llamar a `commit()`.
 Al crear una oportunidad o cambiar su etapa, se busca el pipeline en el tenant actual
 y se comprueba que esté activo y contenga la etapa solicitada.
 
+Al crear o editar una oportunidad, el propietario y las referencias opcionales a
+cuenta y contacto deben existir en el tenant actual y no estar borrados. La validación
+ocurre dentro de la transacción. Una referencia inexistente, ajena o borrada devuelve
+el mismo error `400`, sin revelar si existe en otra organización ni guardar cambios
+parciales. Una oportunidad antigua con referencias inválidas también rechaza ediciones
+hasta corregirlas.
+
+Mover una oportunidad abierta a su etapa actual devuelve la oportunidad sin volver
+a guardarla ni añadir historial. Reintentar un movimiento ya aplicado conserva un
+solo registro de transición. Se mantienen las validaciones del tenant, pipeline y
+estado: los tratos cerrados siguen rechazando movimientos, incluso a su etapa actual.
+
 Identity recibe `PasswordHasher` y `TokenService` por inyección. Sus casos de uso
 no necesitan conocer los algoritmos de contraseñas ni la implementación de JWT.
 
@@ -42,6 +59,11 @@ Con `DEBUG=false`, las rutas protegidas requieren un Bearer JWT válido.
 Con `DEBUG=true`, se mantienen los headers y valores demo para desarrollo local.
 Este modo permite el acceso demo como administrador y no debe usarse en producción.
 Un Bearer inválido se rechaza incluso en desarrollo.
+
+Las peticiones con Bearer también comprueban que el token no haya sido revocado.
+En producción se debe aplicar la migración de `identity_revoked_tokens` antes de
+arrancar la API. Logout invalida únicamente la sesión presentada; otros tokens
+del mismo usuario siguen vigentes.
 
 El arranque en desarrollo conserva la creación de tablas y datos demo. También se
 puede ejecutar el seed explícitamente desde la raíz del proyecto:
@@ -65,3 +87,8 @@ Las pruebas cubren autenticación, permisos, aislamiento de etapas, inyección d
 dependencias y persistencia atómica ante errores y cancelaciones. Usan ASGI directamente
 y repositorios reales sobre SQLite con un adaptador async de pruebas. No requieren
 servicios externos ni sustituyen una prueba de integración con PostgreSQL y asyncpg.
+
+Las pruebas de `test_endpoints_postgres.py` sí ejecutan flujos HTTP con PostgreSQL
+y asyncpg cuando se define `TEST_DATABASE_URL` hacia una base de pruebas. Crean un
+esquema temporal independiente por prueba y cubren clientes, aislamiento, aliases de
+oportunidades, indicadores y revocación de sesiones, incluidas escrituras concurrentes.

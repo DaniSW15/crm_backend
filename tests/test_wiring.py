@@ -20,6 +20,7 @@ from src.modules.crm.application.use_cases.update_deal import UpdateDealUseCase
 from src.modules.crm.infrastructure.repositories import SqlAlchemyDealRepository
 from src.modules.identity.application.use_cases.login import LoginUseCase
 from src.modules.identity.application.use_cases.register_tenant import RegisterTenantUseCase
+from src.modules.identity.infrastructure.token_revocation import SqlAlchemyTokenRevocationRepository
 from src.shared.application.unit_of_work import UnitOfWork
 from src.shared.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -58,6 +59,9 @@ class ApiAuthenticationTests(unittest.IsolatedAsyncioTestCase):
         debug = patch.object(tenant.settings, "DEBUG", False)
         debug.start()
         self.addCleanup(debug.stop)
+        revocations = patch.object(SqlAlchemyTokenRevocationRepository, "is_revoked", return_value=False)
+        revocations.start()
+        self.addCleanup(revocations.stop)
 
     async def test_api_rejects_headers_without_token(self):
         headers = {"X-Tenant-ID": str(uuid4()), "X-User-ID": str(uuid4())}

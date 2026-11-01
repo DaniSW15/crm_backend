@@ -1,7 +1,12 @@
+from datetime import datetime, timezone
+
 from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials
 
-from src.core.tenant import TenantContext, require_authenticated_user
+from src.core.security import decode_access_token
+from src.core.tenant import TenantContext, bearer_scheme, require_authenticated_user
+from src.modules.identity.application.use_cases.logout import LogoutUseCase
 from src.modules.identity.application.use_cases.get_me import GetMeUseCase
 from src.modules.identity.application.use_cases.login import (
     LoginCommand,
@@ -56,6 +61,11 @@ async def register_tenant(
 
 
 @router.post(
+    "/login/",
+    response_model=AuthResponse,
+    include_in_schema=False,
+)
+@router.post(
     "/login",
     response_model=AuthResponse,
     summary="Iniciar sesión con email y contraseña",
@@ -80,6 +90,36 @@ async def login(
         )
 
 
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
+@router.post("/logout/", status_code=status.HTTP_204_NO_CONTENT, summary="Cerrar la sesión actual")
+@inject
+async def logout(
+    use_case: FromDishka[LogoutUseCase],
+    auth: TenantContext = Depends(require_authenticated_user),
+    bearer: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> None:
+    if bearer is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere un Bearer Token para cerrar sesión.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # La dependencia de autenticación ya validó firma, identidad, expiración y revocación.
+    try:
+        payload = decode_access_token(bearer.credentials)
+    except ValueError:
+        # El token puede vencer entre la dependencia y la ejecución de esta ruta.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticación inválido.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    await use_case.execute(
+        bearer.credentials, datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+    )
+
+
+@router.get("/me/", response_model=UserProfileResponse, include_in_schema=False)
 @router.get(
     "/me",
     response_model=UserProfileResponse,

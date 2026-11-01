@@ -7,7 +7,7 @@ from uuid import UUID
 from src.modules.crm.application.ports.deal_repository import DealRepository
 from src.modules.crm.domain.entities.deal import Deal
 from src.shared.application.unit_of_work import UnitOfWork
-from src.shared.domain.exceptions import EntityNotFoundException
+from src.shared.domain.exceptions import BusinessRuleViolationException, EntityNotFoundException
 
 
 @dataclass
@@ -46,6 +46,16 @@ class UpdateDealUseCase:
                 contact_id=cmd.contact_id,
                 custom_fields=cmd.custom_fields,
             )
+
+            if not await self.deal_repo.references_exist(
+                tenant_id=deal.tenant_id,
+                owner_id=deal.owner_id,
+                account_id=deal.account_id,
+                contact_id=deal.contact_id,
+            ):
+                raise BusinessRuleViolationException(
+                    "El propietario, la cuenta o el contacto no están disponibles en esta organización."
+                )
 
             return await self.deal_repo.save(deal)
 

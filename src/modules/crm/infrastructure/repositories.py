@@ -12,11 +12,14 @@ from src.modules.crm.application.ports.pipeline_repository import PipelineReposi
 from src.modules.crm.domain.entities.deal import Deal
 from src.modules.crm.domain.entities.pipeline import Pipeline, PipelineStage
 from src.modules.crm.infrastructure.models import (
+    AccountModel,
+    ContactModel,
     DealModel,
     DealStageHistoryModel,
     PipelineModel,
     PipelineStageModel,
 )
+from src.modules.identity.infrastructure.models import UserModel
 
 
 class SqlAlchemyDealRepository(DealRepository):
@@ -86,6 +89,29 @@ class SqlAlchemyDealRepository(DealRepository):
         result = await self.session.execute(stmt)
         models = result.scalars().all()
         return [self._to_entity(m) for m in models]
+
+    async def references_exist(
+        self,
+        tenant_id: UUID,
+        owner_id: UUID,
+        account_id: Optional[UUID] = None,
+        contact_id: Optional[UUID] = None,
+    ) -> bool:
+        for model, reference_id in (
+            (UserModel, owner_id),
+            (AccountModel, account_id),
+            (ContactModel, contact_id),
+        ):
+            if reference_id is None:
+                continue
+            result = await self.session.execute(select(model.id).where(
+                model.id == reference_id,
+                model.tenant_id == tenant_id,
+                model.is_deleted.is_(False),
+            ))
+            if result.scalar_one_or_none() is None:
+                return False
+        return True
 
     async def save(self, deal: Deal) -> Deal:
         stmt = select(DealModel).where(

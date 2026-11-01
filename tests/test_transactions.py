@@ -18,7 +18,7 @@ from src.modules.crm.application.use_cases.create_deal import CreateDealCommand,
 from src.modules.crm.application.use_cases.delete_deal import DeleteDealUseCase
 from src.modules.crm.application.use_cases.move_deal_stage import MoveDealStageCommand, MoveDealStageUseCase
 from src.modules.crm.application.use_cases.update_deal import UpdateDealCommand, UpdateDealUseCase
-from src.modules.crm.infrastructure.models import DealModel, DealStageHistoryModel, PipelineModel, PipelineStageModel
+from src.modules.crm.infrastructure.models import AccountModel, ContactModel, DealModel, DealStageHistoryModel, PipelineModel, PipelineStageModel
 from src.modules.crm.infrastructure.repositories import SqlAlchemyDealRepository, SqlAlchemyPipelineRepository
 from src.modules.identity.application.ports.security import PasswordHasher, TokenService
 from src.modules.identity.application.use_cases.register_tenant import RegisterTenantCommand, RegisterTenantUseCase
@@ -136,6 +136,91 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
         with Session(self.engine) as session:
             return session.get(DealModel, deal_id).stage_id
 
+    def related_records(self, tenant_id, is_deleted=False):
+        owner_id, account_id, contact_id = uuid4(), uuid4(), uuid4()
+        with Session(self.engine) as session, session.begin():
+            session.add(UserModel(
+                id=owner_id, tenant_id=tenant_id, email=f"{owner_id}@example.com",
+                full_name="Related owner", hashed_password="unused", is_deleted=is_deleted,
+            ))
+            session.add(AccountModel(
+                id=account_id, tenant_id=tenant_id, name="Related account", is_deleted=is_deleted,
+            ))
+            session.flush()
+            session.add(ContactModel(
+                id=contact_id, tenant_id=tenant_id, first_name="Related", last_name="Contact",
+                account_id=account_id, is_deleted=is_deleted,
+            ))
+        return dict(owner_id=owner_id, account_id=account_id, contact_id=contact_id)
+
+    async def test_create_accepts_references_from_current_tenant(self):
+        references = self.related_records(self.tenant_id)
+        deal = await self.create.execute(self.command(**references))
+
+        with Session(self.engine) as session:
+            stored = session.get(DealModel, deal.id)
+            for field, value in references.items():
+                self.assertEqual(getattr(stored, field), value)
+        self.assertEqual(self.count(DealStageHistoryModel), 1)
+
+    async def test_create_rejects_unavailable_references_without_writes(self):
+        sources = {
+            "foreign": self.related_records(self.other_tenant_id),
+            "deleted": self.related_records(self.tenant_id, is_deleted=True),
+            "missing": dict(owner_id=uuid4(), account_id=uuid4(), contact_id=uuid4()),
+        }
+        messages = []
+        for source, references in sources.items():
+            for field, value in references.items():
+                with self.subTest(source=source, field=field):
+                    with self.assertRaises(BusinessRuleViolationException) as error:
+                        await self.create.execute(self.command(**{field: value}))
+                    messages.append(error.exception.message)
+                    self.assertEqual(self.count(DealModel), 0)
+                    self.assertEqual(self.count(DealStageHistoryModel), 0)
+        self.assertEqual(len(set(messages)), 1)
+
+    async def test_update_accepts_references_from_current_tenant(self):
+        deal = await self.create.execute(self.command())
+        references = self.related_records(self.tenant_id)
+        await UpdateDealUseCase(self.deals, self.uow).execute(UpdateDealCommand(
+            deal.id, self.tenant_id, title="Updated with references",
+            account_id=references["account_id"], contact_id=references["contact_id"],
+        ))
+
+        with Session(self.engine) as session:
+            stored = session.get(DealModel, deal.id)
+            self.assertEqual(stored.title, "Updated with references")
+            self.assertEqual(stored.account_id, references["account_id"])
+            self.assertEqual(stored.contact_id, references["contact_id"])
+            self.assertEqual(stored.owner_id, self.user_id)
+
+    async def test_update_rejects_unavailable_references_without_partial_changes(self):
+        original = self.related_records(self.tenant_id)
+        deal = await self.create.execute(self.command(**original))
+        sources = {
+            "foreign": self.related_records(self.other_tenant_id),
+            "deleted": self.related_records(self.tenant_id, is_deleted=True),
+            "missing": dict(account_id=uuid4(), contact_id=uuid4()),
+        }
+        messages = []
+        for source, references in sources.items():
+            for field in ("account_id", "contact_id"):
+                with self.subTest(source=source, field=field):
+                    with self.assertRaises(BusinessRuleViolationException) as error:
+                        await UpdateDealUseCase(self.deals, self.uow).execute(UpdateDealCommand(
+                            deal.id, self.tenant_id, title="Must not persist",
+                            **{field: references[field]},
+                        ))
+                    messages.append(error.exception.message)
+                    with Session(self.engine) as session:
+                        stored = session.get(DealModel, deal.id)
+                        self.assertEqual(stored.title, deal.title)
+                        for original_field, value in original.items():
+                            self.assertEqual(getattr(stored, original_field), value)
+                    self.assertEqual(self.count(DealStageHistoryModel), 1)
+        self.assertEqual(len(set(messages)), 1)
+
     async def test_create_commits_deal_and_initial_history(self):
         deal = await self.create.execute(self.command())
         self.assertEqual(self.count(DealModel), 1)
@@ -154,6 +239,61 @@ class TransactionTests(unittest.IsolatedAsyncioTestCase):
         await self.move.execute(MoveDealStageCommand(self.tenant_id, deal.id, self.next_stage_id, self.user_id))
         self.assertEqual(self.stored_stage(deal.id), self.next_stage_id)
         self.assertEqual(self.count(DealStageHistoryModel), 2)
+
+    async def test_move_to_current_stage_preserves_deal_and_history(self):
+        deal = await self.create.execute(self.command())
+        command = MoveDealStageCommand(self.tenant_id, deal.id, self.stage_id, self.user_id)
+
+        for _ in range(3):
+            result = await self.move.execute(command)
+            self.assertEqual(result, deal)
+
+        self.assertEqual(self.stored_stage(deal.id), self.stage_id)
+        self.assertEqual(self.count(DealStageHistoryModel), 1)
+
+    async def test_retry_move_records_only_one_transition(self):
+        deal = await self.create.execute(self.command())
+        command = MoveDealStageCommand(self.tenant_id, deal.id, self.next_stage_id, self.user_id)
+
+        first = await self.move.execute(command)
+        retry = await self.move.execute(command)
+
+        self.assertEqual(retry, first)
+        self.assertEqual(self.stored_stage(deal.id), self.next_stage_id)
+        self.assertEqual(self.count(DealStageHistoryModel), 2)
+        with Session(self.engine) as session:
+            transitions = session.scalars(select(DealStageHistoryModel).where(
+                DealStageHistoryModel.from_stage_id.is_not(None)
+            )).all()
+            self.assertEqual(len(transitions), 1)
+            self.assertEqual(transitions[0].from_stage_id, self.stage_id)
+            self.assertEqual(transitions[0].to_stage_id, self.next_stage_id)
+            self.assertEqual(transitions[0].changed_by_user_id, self.user_id)
+
+    async def test_move_to_current_stage_rejects_foreign_tenant(self):
+        deal = await self.create.execute(self.command())
+
+        with self.assertRaises(EntityNotFoundException):
+            await self.move.execute(MoveDealStageCommand(
+                self.other_tenant_id, deal.id, self.stage_id, self.user_id
+            ))
+
+        self.assertEqual(self.stored_stage(deal.id), self.stage_id)
+        self.assertEqual(self.count(DealStageHistoryModel), 1)
+
+    async def test_move_to_current_stage_preserves_closed_deal_restriction(self):
+        deal = await self.create.execute(self.command())
+        for status in ("WON", "LOST"):
+            with self.subTest(status=status):
+                with Session(self.engine) as session, session.begin():
+                    session.get(DealModel, deal.id).status = status
+
+                with self.assertRaises(BusinessRuleViolationException):
+                    await self.move.execute(MoveDealStageCommand(
+                        self.tenant_id, deal.id, self.stage_id, self.user_id
+                    ))
+
+                self.assertEqual(self.count(DealStageHistoryModel), 1)
 
     async def test_move_rolls_back_when_history_foreign_key_fails(self):
         deal = await self.create.execute(self.command())

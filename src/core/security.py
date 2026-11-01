@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -53,12 +54,16 @@ def create_access_token(
     """Genera un token JWT (HS256) estándar con tiempo de expiración."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
-    if expires_delta:
+    if expires_delta is not None:
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({"exp": int(expire.timestamp()), "iat": int(now.timestamp())})
+    to_encode.update({
+        "exp": int(expire.timestamp()),
+        "iat": int(now.timestamp()),
+        "jti": secrets.token_urlsafe(32),
+    })
 
     header = {"alg": "HS256", "typ": "JWT"}
     header_b64 = _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
@@ -78,6 +83,9 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         raise ValueError("Formato de token JWT inválido.")
 
     header_b64, payload_b64, signature_b64 = parts
+    header = json.loads(_base64url_decode(header_b64).decode("utf-8"))
+    if not isinstance(header, dict) or header.get("alg") != "HS256":
+        raise ValueError("Algoritmo de token JWT inválido.")
     signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
 
     expected_sig = hmac.new(settings.SECRET_KEY.encode("utf-8"), signing_input, hashlib.sha256).digest()
@@ -85,9 +93,17 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         raise ValueError("Firma criptográfica del token inválida.")
 
     payload = json.loads(_base64url_decode(payload_b64).decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Contenido de token JWT inválido.")
     exp = payload.get("exp")
-    if exp and exp < int(datetime.now(timezone.utc).timestamp()):
-        raise ValueError("El token ha expirado.")
+    if (
+        isinstance(exp, bool)
+        or not isinstance(exp, (int, float))
+        or (isinstance(exp, float) and not math.isfinite(exp))
+        or exp > 253402300799
+        or exp <= datetime.now(timezone.utc).timestamp()
+    ):
+        raise ValueError("El token ha expirado o no tiene una expiración válida.")
 
     return payload
 

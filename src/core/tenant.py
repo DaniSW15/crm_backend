@@ -2,17 +2,44 @@ from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
+from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.config import get_settings
 from src.core.security import decode_access_token
+from src.modules.identity.application.ports.token_revocation import TokenRevocationRepository
+from src.modules.identity.application.use_cases.logout import token_fingerprint
 
 settings = get_settings()
 DEFAULT_DEV_TENANT = "00000000-0000-0000-0000-000000000001"
 DEFAULT_DEV_USER = "00000000-0000-0000-0000-000000000002"
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+@inject
+async def check_token_revocation(
+    revocations: FromDishka[TokenRevocationRepository],
+    bearer: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> None:
+    if not bearer or not bearer.credentials:
+        return
+    try:
+        # Los tokens malformados o vencidos no deben consultar la base de datos.
+        decode_access_token(bearer.credentials)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticación inválido.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if await revocations.is_revoked(token_fingerprint(bearer.credentials)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La sesión fue cerrada. Inicia sesión de nuevo.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 @dataclass(frozen=True)
@@ -38,6 +65,7 @@ def resolve_tenant_context(
         alias="X-User-ID",
         description="UUID del usuario (solo en DEBUG)",
     ),
+    _revocation_check: None = Depends(check_token_revocation),
 ) -> TenantContext:
     """
     Resuelve el tenant y usuario actual:

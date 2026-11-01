@@ -1,9 +1,13 @@
 from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.crm.application.ports.analytics_repository import AnalyticsRepository
+from src.modules.crm.application.ports.customer_repository import CustomerRepository
 from src.modules.crm.application.ports.deal_repository import DealRepository
 from src.modules.crm.application.ports.pipeline_repository import PipelineRepository
 from src.modules.crm.application.use_cases.create_deal import CreateDealUseCase
+from src.modules.crm.application.use_cases.analytics_summary import AnalyticsSummaryUseCase
+from src.modules.crm.application.use_cases.customers import CustomerUseCases
 from src.modules.crm.application.use_cases.delete_deal import DeleteDealUseCase
 from src.modules.crm.application.use_cases.list_deals import ListDealsUseCase
 from src.modules.crm.application.use_cases.list_pipelines import ListPipelinesUseCase
@@ -13,6 +17,8 @@ from src.modules.crm.infrastructure.repositories import (
     SqlAlchemyDealRepository,
     SqlAlchemyPipelineRepository,
 )
+from src.modules.crm.infrastructure.analytics_repository import SqlAlchemyAnalyticsRepository
+from src.modules.crm.infrastructure.customer_repository import SqlAlchemyCustomerRepository
 from src.shared.application.unit_of_work import UnitOfWork
 
 
@@ -21,6 +27,22 @@ class CrmProvider(Provider):
     Proveedor de inyección de dependencias (Dishka) para el módulo CRM.
     """
     scope = Scope.REQUEST
+
+    @provide
+    def get_customer_repository(self, session: AsyncSession) -> CustomerRepository:
+        return SqlAlchemyCustomerRepository(session)
+
+    @provide
+    def get_customer_use_cases(self, repo: CustomerRepository, uow: UnitOfWork) -> CustomerUseCases:
+        return CustomerUseCases(repo, uow)
+
+    @provide
+    def get_analytics_repository(self, session: AsyncSession) -> AnalyticsRepository:
+        return SqlAlchemyAnalyticsRepository(session)
+
+    @provide
+    def get_analytics_summary(self, repo: AnalyticsRepository) -> AnalyticsSummaryUseCase:
+        return AnalyticsSummaryUseCase(repo)
 
     @provide
     def get_deal_repository(self, session: AsyncSession) -> DealRepository:

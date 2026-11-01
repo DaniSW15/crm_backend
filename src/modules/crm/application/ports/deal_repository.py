@@ -35,6 +35,17 @@ class DealRepository(ABC):
         pass
 
     @abstractmethod
+    async def references_exist(
+        self,
+        tenant_id: UUID,
+        owner_id: UUID,
+        account_id: Optional[UUID] = None,
+        contact_id: Optional[UUID] = None,
+    ) -> bool:
+        """Comprueba que las referencias existan en el tenant y no estén borradas."""
+        pass
+
+    @abstractmethod
     async def record_stage_history(
         self,
         tenant_id: UUID,

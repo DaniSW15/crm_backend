@@ -46,6 +46,9 @@ class MoveDealStageUseCase:
             # Invocar la lógica de negocio pura en la entidad de dominio
             deal.change_stage(cmd.new_stage_id)
 
+            if previous_stage_id == cmd.new_stage_id:
+                return deal
+
             # Persistir el cambio de estado
             updated_deal = await self.deal_repo.save(deal)
 

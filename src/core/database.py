@@ -11,6 +11,7 @@ from src.shared.infrastructure.base_model import Base
 
 # Importar modelos para que Base.metadata los reconozca todos
 import src.modules.identity.infrastructure.models  # noqa: F401
+import src.modules.identity.infrastructure.session_models  # noqa: F401
 import src.modules.crm.infrastructure.models  # noqa: F401
 
 settings = get_settings()
