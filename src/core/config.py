@@ -1,10 +1,15 @@
 from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing_extensions import Self
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "Enterprise CRM Backend"
     APP_VERSION: str = "0.1.0"
+    ENVIRONMENT: Literal["development", "test", "production"] = "development"
     DEBUG: bool = False
 
     # Database Settings
@@ -15,8 +20,8 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = "changeme-in-production-super-secret-key"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    ALGORITHM: Literal["HS256"] = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60 * 24, gt=0)
 
     # CORS Origins (Angular & React local dev ports)
     CORS_ORIGINS: list[str] = [
@@ -35,6 +40,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> Self:
+        if self.ENVIRONMENT == "production":
+            if self.DEBUG:
+                raise ValueError("DEBUG debe estar desactivado en producción.")
+            if self.DB_ECHO:
+                raise ValueError("DB_ECHO debe estar desactivado en producción.")
+            example_keys = {
+                "changeme-in-production-super-secret-key",
+                "super-secret-key-change-in-production-1234567890",
+            }
+            if self.SECRET_KEY.strip() in example_keys or len(self.SECRET_KEY.strip()) < 32:
+                raise ValueError("Producción requiere una SECRET_KEY propia de al menos 32 caracteres.")
+        return self
 
 
 @lru_cache

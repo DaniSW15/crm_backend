@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -50,13 +50,13 @@ class AuthenticationTests(unittest.TestCase):
             self.resolve(create_access_token({"role": "ADMIN"}))
         self.assertEqual(error.exception.status_code, 401)
 
-    def test_development_defaults_and_headers_are_preserved(self):
+    def test_debug_never_authenticates_demo_defaults_or_headers(self):
         with patch.object(tenant.settings, "DEBUG", True):
-            context = self.resolve()
-            self.assertEqual(context.tenant_id, UUID(tenant.DEFAULT_DEV_TENANT))
-            tenant_id, user_id = uuid4(), uuid4()
-            context = self.resolve(tenant_id=str(tenant_id), user_id=str(user_id))
-            self.assertEqual((context.tenant_id, context.user_id), (tenant_id, user_id))
+            for headers in ((None, None), (str(uuid4()), str(uuid4())), ("invalid", "invalid")):
+                with self.subTest(headers=headers), self.assertRaises(HTTPException) as error:
+                    self.resolve(tenant_id=headers[0], user_id=headers[1])
+                self.assertEqual(error.exception.status_code, 401)
+                self.assertEqual(error.exception.headers, {"WWW-Authenticate": "Bearer"})
 
     def test_password_round_trip_and_mock_hash_rejection(self):
         hashed = hash_password("test-password")

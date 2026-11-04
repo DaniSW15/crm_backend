@@ -12,8 +12,6 @@ from src.modules.identity.application.ports.token_revocation import TokenRevocat
 from src.modules.identity.application.use_cases.logout import token_fingerprint
 
 settings = get_settings()
-DEFAULT_DEV_TENANT = "00000000-0000-0000-0000-000000000001"
-DEFAULT_DEV_USER = "00000000-0000-0000-0000-000000000002"
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -58,19 +56,18 @@ def resolve_tenant_context(
     x_tenant_id: Optional[str] = Header(
         default=None,
         alias="X-Tenant-ID",
-        description="UUID de la organización / tenant (solo en DEBUG)",
+        description="Ignorado: la organización se obtiene exclusivamente del JWT.",
     ),
     x_user_id: Optional[str] = Header(
         default=None,
         alias="X-User-ID",
-        description="UUID del usuario (solo en DEBUG)",
+        description="Ignorado: el usuario se obtiene exclusivamente del JWT.",
     ),
     _revocation_check: None = Depends(check_token_revocation),
 ) -> TenantContext:
     """
-    Resuelve el tenant y usuario actual:
-    1. Si viene Bearer JWT token, lo valida y extrae claims de seguridad (tenant_id, sub, role).
-    2. Solo en DEBUG, permite headers X-Tenant-ID / X-User-ID o valores demo.
+    Valida el JWT y obtiene tenant, usuario y rol exclusivamente de sus claims.
+    DEBUG y los headers de organización nunca autentican una petición.
     """
     # 1. Intentar validar por Bearer JWT Token
     if bearer and bearer.credentials:
@@ -87,24 +84,11 @@ def resolve_tenant_context(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    # 2. Los headers de desarrollo nunca autentican peticiones en producción.
-    if not settings.DEBUG:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticación requerida. Envía un Bearer Token válido.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    effective_tenant_id = x_tenant_id or DEFAULT_DEV_TENANT
-    try:
-        tenant_uuid = UUID(effective_tenant_id)
-        user_uuid = UUID(x_user_id or DEFAULT_DEV_USER)
-        return TenantContext(tenant_id=tenant_uuid, user_id=user_uuid, role="ADMIN")
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El 'X-Tenant-ID' o 'X-User-ID' provisto no es un UUID válido.",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Autenticación requerida. Envía un Bearer Token válido.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def require_authenticated_user(

@@ -1,7 +1,7 @@
 from types import TracebackType
-from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
+from typing_extensions import Self
 
 from src.shared.application.unit_of_work import UnitOfWork
 

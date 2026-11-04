@@ -53,12 +53,14 @@ no necesitan conocer los algoritmos de contraseñas ni la implementación de JWT
 
 ## Autenticación y desarrollo
 
-Con `DEBUG=false`, las rutas protegidas requieren un Bearer JWT válido.
-`X-Tenant-ID` y `X-User-ID` no autentican peticiones en ese modo.
+Las rutas protegidas requieren un Bearer JWT válido también con `DEBUG=true`.
+`X-Tenant-ID` y `X-User-ID` nunca autentican ni cambian la identidad del JWT.
+Los usuarios demo deben iniciar sesión para obtener su token.
 
-Con `DEBUG=true`, se mantienen los headers y valores demo para desarrollo local.
-Este modo permite el acceso demo como administrador y no debe usarse en producción.
-Un Bearer inválido se rechaza incluso en desarrollo.
+Para producción, configura `ENVIRONMENT=production`, `DEBUG=false`, `DB_ECHO=false`
+y una `SECRET_KEY` privada de al menos 32 caracteres. La API rechaza el arranque
+con debug, logging SQL, claves de ejemplo o claves demasiado cortas en ese entorno.
+El algoritmo admitido es HS256 y la duración del token debe ser positiva.
 
 Las peticiones con Bearer también comprueban que el token no haya sido revocado.
 En producción se debe aplicar la migración de `identity_revoked_tokens` antes de

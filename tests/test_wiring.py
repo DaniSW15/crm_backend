@@ -85,6 +85,32 @@ class ApiAuthenticationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await request("/api/v1/deals", headers=headers), 200)
         self.assertEqual(list_deals.call_args.kwargs["tenant_id"], tenant_id)
 
+    async def test_private_routes_require_a_jwt_even_in_debug(self):
+        paths = ["/api/v1/auth/me", "/api/v1/deals", "/api/v1/pipelines",
+                 "/api/v1/customers/", "/api/v1/analytics/summary/", "/api/v1/opportunities/"]
+        attempts = [{}, {"Authorization": "Bearer"}, {"Authorization": "Bearer invalid-token"},
+                    {"X-Tenant-ID": str(uuid4()), "X-User-ID": str(uuid4())}]
+        with patch.object(tenant.settings, "DEBUG", True):
+            for path in paths:
+                for headers in attempts:
+                    with self.subTest(path=path, headers=headers):
+                        self.assertEqual(await request(path, headers=headers), 401)
+
+    async def test_debug_never_authenticates_writes_without_a_jwt(self):
+        deal_id = uuid4()
+        cases = [
+            ("POST", "/api/v1/deals", {"title": "Unauthorized", "amount": "10.00",
+                "pipeline_id": str(uuid4()), "stage_id": str(uuid4()), "owner_id": str(uuid4())}),
+            ("POST", f"/api/v1/deals/{deal_id}/move-stage", {"new_stage_id": str(uuid4())}),
+            ("PUT", f"/api/v1/deals/{deal_id}", {"title": "Unauthorized edit"}),
+            ("DELETE", f"/api/v1/deals/{deal_id}", None),
+            ("POST", "/api/v1/customers/", {"name": "Unauthorized customer"}),
+        ]
+        with patch.object(tenant.settings, "DEBUG", True):
+            for method, path, body in cases:
+                with self.subTest(method=method, path=path):
+                    self.assertEqual(await request(path, method, body=body), 401)
+
     async def test_api_blocks_delete_for_client_role(self):
         token = create_access_token({"tenant_id": str(uuid4()), "sub": str(uuid4()), "role": "CLIENTE"})
         self.assertEqual(await request(
